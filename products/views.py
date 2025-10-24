@@ -7,7 +7,8 @@ from . import utils
 from .forms import UploadForm
 from .models import Product
 from django.db.models import Count,F,Sum,Avg,DecimalField,ExpressionWrapper
-
+import pandas as pd
+from django.http import HttpResponse
 # Create your views here.
 
 def dashboard(request):
@@ -27,39 +28,28 @@ def dashboard(request):
     return render(request,"products/dashboard.html",{"kpi":kpi,"top_cats":top_cats})
 
 def product_upload(request):
-    ctx={"form":UploadForm()}
-    if request.method=="POST":
-        form=UploadForm(request.POST,request.FILES)
+    ctx = {"form": UploadForm()}
+    if request.method == "POST":
+        form = UploadForm(request.POST, request.FILES)
         if form.is_valid():
-            up=request.FILES["file"]
-            sheet=form.cleaned_data.get("sheet_name") or None
+            files = request.FILES.getlist("file")
+            sheet = form.cleaned_data.get("sheet_name") or None
 
-            updir=os.path.join(settings.MEDIA_ROOT,"uploads")
-            os.makedirs(updir,exist_ok=True)
-            fpath=os.path.join(updir,up.name)
-            with open(fpath,"wb+") as dest:
-                for ch in up.chunks():
-                    dest.write(ch)
+            updir = os.path.join(settings.MEDIA_ROOT, "uploads")
+            os.makedirs(updir, exist_ok=True)
 
-            df=utils.read_any(fpath,sheet)
-            df=utils.normalize_for_product(df)
+            total_rows = 0
+            for up in files:
+                fpath = os.path.join(updir, up.name)
+                with open(fpath, "wb+") as dest:
+                    for ch in up.chunks():
+                        dest.write(ch)
 
-            rows=df.to_dict("records")
-            if len(rows)==1:
-                r=rows[0]
+                df = utils.read_any(fpath, sheet)
+                df = utils.normalize_for_product(df)
+                rows = df.to_dict("records")
+                total_rows += len(rows)
 
-                Product.objects.update_or_create(
-                    sku=r["sku"],
-                    defaults=dict(
-                        name=r["name"],
-                        price=r["price"],
-                        quantity=int(r["quantity"]),
-                        category=r.get("category") or "",
-                        tx_date=r["tx_date"],
-                    )
-                )
-
-            elif len(rows)>1:
                 for r in rows:
                     Product.objects.update_or_create(
                         sku=r["sku"],
@@ -72,6 +62,23 @@ def product_upload(request):
                         )
                     )
 
-            ctx["msg"]=f"Uploaded : {len(rows)} rows"
+            ctx["msg"] = f"Uploaded : {total_rows} rows"
 
-    return render(request,"products/upload.html",ctx)
+    return render(request, "products/upload.html", ctx)
+
+
+
+
+
+def download_template(request):
+
+    df = pd.DataFrame(columns=["sku","name","category","price","quantity","tx_date"])
+
+
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response['Content-Disposition'] = 'attachment; filename="product_template.xlsx"'
+
+    with pd.ExcelWriter(response, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+
+    return response

@@ -1,12 +1,23 @@
 <h2>Excel/CSV Upload</h2>
-{% if msg %} <p style="color:green">{{ msg }}</p> {% endif %}
+
+{% if msg %}
+    <p style="color:green">{{ msg }}</p>
+{% endif %}
+
+
+<p>
+    <a href="{% url 'download_template' %}" class="btn btn-primary">Download Template</a>
+</p>
+
 
 <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
-    {{ form.as_p }}
+    {{ form.sheet_name.label_tag }} {{ form.sheet_name }}<br>
+    <input type="file" name="file" multiple><br><br>
     <button type="submit">Upload</button>
 </form>
 
-<p>
-    <a>Mehsul Siyahisi</a>
-</p>
+{##}
+{#<p>#}
+{#    <a href="{% url 'product_list' %}">Mehsul Siyahisi</a>#}
+{#</p>#}
